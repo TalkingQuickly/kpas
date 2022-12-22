@@ -1,0 +1,51 @@
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+{% if gitea_tls == true %}
+    cert-manager.io/cluster-issuer: {{ gitea_certificate_issuer }}
+{% endif %}
+  hosts:
+    - host: {{ gitea_http_domain }}
+      paths:
+        - path: '/'
+          pathType: Prefix
+{% if gitea_tls == true %}
+  tls:
+    - secretName: gitea-tls-secret
+      hosts:
+        - {{ gitea_http_domain }}
+{% endif %}
+
+gitea:
+  config:
+    APP_NAME: Gitea
+    RUN_MODE: 'prod'
+    server:
+      SSH_DOMAIN: {{ gitea_ssh_domain }}
+      SSH_PORT: {{ gitea_ssh_port }}
+      ROOT_URL: '{{ gitea_protocol }}://{{ gitea_http_domain }}/'
+    service:
+      DISABLE_REGISTRATION: 'true'
+      REQUIRE_SIGNIN_VIEW: 'true'
+    security:
+      INSTALL_LOCK: 'true'
+  admin:
+    username: ""
+    password: ""
+    email: ""
+  
+
+{% if global_cluster.kpas_provider == 'eks' %}
+service:
+  ssh:
+    type: LoadBalancer
+    port: {{ gitea_ssh_port }}
+    targetPort: 22
+{% else %}
+service:
+  ssh:
+    type: NodePort
+    port: 22
+    nodePort: 30010
+{% endif%}

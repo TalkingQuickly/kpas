@@ -1,0 +1,104 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Make sure we have the Gitea helm repos'
+  shell: |
+    helm repo add gitea-charts https://dl.gitea.io/charts/
+    helm repo update
+
+- name: 'Install Gitea'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install gitea gitea-charts/gitea \
+    -f {{ values.path }} \
+    --namespace {{ namespace | mandatory }}
+
+- name: Only validate certs if we're using letsencrypt-production as our issuer
+  set_fact: 
+    validate_certs: "{{ (global_ingress.certificate_issuer == 'letsencrypt-production') | ternary('yes', 'no') }}"
+
+- name: "Waiting for Gitea to be available"
+  uri:
+    url: "{{gitea_protocol}}://{{ gitea_http_domain }}"
+    status_code: 200
+    validate_certs: "{{ validate_certs }}"
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 5
+  changed_when: false
+
+- name: "Waiting for Gitea pods to stablise"
+  wait_for:
+    timeout: 30
+  delegate_to: localhost
+
+- name: 'Create the Gitea admin user'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl exec -it --namespace {{ namespace }} \
+      $(kubectl get pods -n {{ namespace }} --selector='app.kubernetes.io/name=gitea' -o jsonpath='{.items[0].metadata.name}') -c gitea \
+      -- su git -c 'gitea admin user create --username {{ gitea_username }} --password {{ gitea_password }} --email {{ gitea_email }} --admin --access-token --must-change-password=false'
+  register: user_creation
+  retries: 10
+  delay: 20
+  until: (user_creation.rc == 0) or ('user already exists' in user_creation.stdout)
+  failed_when: 
+    - (user_creation.rc == 1) and ('user already exists' not in user_creation.stdout)
+
+- name: get the access token
+  set_fact:
+    gitea_access_token: "{{ user_creation.stdout | regex_search('Access token was successfully created... (.*)') | regex_replace('Access token was successfully created... ', '') }}"
+  when: user_creation.rc == 0
+
+- name: "Waiting for Gitea to be available"
+  uri:
+    url: "{{gitea_protocol}}://{{ gitea_http_domain }}"
+    status_code: 200
+    validate_certs: "{{ validate_certs }}"
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 5
+  changed_when: false
+
+- name: 'Create the oAuth application for Drone CI Logins'
+  uri:
+    url: "{{gitea_protocol}}://{{gitea_http_domain}}/api/v1/user/applications/oauth2"
+    method: post
+    headers:
+      accept: application/json
+      Authorization: token {{ gitea_access_token }}
+      Content-Type: application/json
+    body: "{\"name\":\"DroneCI\", \"redirect_uris\": [ \"{{ drone_protocol }}://{{ drone_domain }}/login\" ] }"
+    body_format: json
+    status_code: '201'
+    validate_certs: "{{ validate_certs }}"
+  register: oauth2app_output
+  when: user_creation.rc == 0
+
+- name: 'Create the secret with the drone app creds'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'oauth-secret.yml.j2') }}" | kubectl apply -f - \
+  when: user_creation.rc == 0
+
+- name: Delete the tempfile
+  file:
+   path: "{{ values.path }}"
+   state: absent
+  when: values.path is defined
+

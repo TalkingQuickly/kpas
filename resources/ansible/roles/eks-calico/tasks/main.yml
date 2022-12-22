@@ -1,0 +1,16 @@
+
+- name: 'Create a tempfile for the calico manigest'
+  tempfile:
+    state:  file
+  register: manifest
+
+- name: Create the calico manifest file
+  template:
+    src: calico.yml.j2
+    dest: "{{manifest.path}}"
+    force: yes
+
+- name: Apply the Calico manifest
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl apply -f {{ manifest.path }}

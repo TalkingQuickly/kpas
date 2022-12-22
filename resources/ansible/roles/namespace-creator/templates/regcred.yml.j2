@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  .dockerconfigjson: {{ ('{"auths":{"registry.' + global_ingress.base_domain + '":{"username":"' + global_ingress.basic_auth_username + '","password":"' + global_ingress.basic_auth_password + '","email":"user@example.com","auth":"' + ((global_ingress.basic_auth_username+':'+global_ingress.basic_auth_password) | b64encode) + '"}}}') | b64encode }}
+kind: Secret
+metadata:
+  name: regcred
+  namespace: {{ item }}
+type: kubernetes.io/dockerconfigjson

@@ -1,0 +1,4 @@
+collections:
+  - google.cloud
+  - community.general
+  - hetzner.hcloud

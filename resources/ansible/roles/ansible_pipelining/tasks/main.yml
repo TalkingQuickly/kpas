@@ -1,0 +1,6 @@
+- lineinfile:
+    dest: /etc/sudoers
+    line: 'Defaults requiretty'
+    state: absent
+  vars:
+    ansible_ssh_pipelining: no

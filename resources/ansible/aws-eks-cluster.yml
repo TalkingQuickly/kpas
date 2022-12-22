@@ -1,0 +1,109 @@
+---
+- name: Create the EKS Cluster
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ global_aws_eks.access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ global_aws_eks.secret_access_key }}"
+  tasks:
+    - name: Delete CloudFormation stacks.
+      cloudformation:
+        aws_access_key: "{{ global_aws_eks.access_key_id }}"
+        aws_secret_key: "{{ global_aws_eks.secret_access_key }}"
+        stack_name: "{{ item }}"
+        state: absent
+        region: "{{ global_aws_eks.region }}"
+      with_items:
+        - "{{ global_cluster.name }}-nodegroup"
+        - "{{ global_cluster.name }}-cluster"
+        - "{{ global_cluster.name }}-vpc"
+      when: global_cluster.state == 'absent'
+
+    - fail:
+        msg: Cluster deleted
+      when: global_cluster.state == 'absent'
+
+    - import_role:
+        name: aws_eks_cluster
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: eks-calico
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: helm-nginx-ingress
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: helm-kubernetes-dashboard
+      when: global_cluster.state == 'present'
+
+    - pause:
+        prompt: Please make any requried DNS changes and then press Enter
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: namespace-creator
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: helm-cert-manager
+      vars:
+        namespace: cert-manager
+      when: global_cluster.state == 'present'
+
+    - import_role:
+        name: helm-docker-registry
+      vars:
+        namespace: cluster-registry
+        username: "{{ global_ingress.basic_auth_username }}"
+        password: "{{ global_ingress.basic_auth_password }}"
+        domain: "registry.{{ global_ingress.base_domain }}"
+        tls: "{{ global_ingress.tls }}"
+        registry_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+        registry_force_tls: "{{ global_ingress.force_tls }}"
+      when: global_cluster.state == 'present' and global_install.registry == true
+
+    - import_role:
+        name: monitoring-helm-apps
+      when: global_cluster.state == 'present' and global_install.monitoring_apps == true
+
+    - import_role:
+        name: helm-gitea
+      vars:
+        namespace: gitea
+        gitea_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        gitea_http_domain: "{{ global_gitea.http_domain }}"
+        gitea_ssh_domain: "{{ global_gitea.git_domain }}"
+        gitea_ssh_port: "{{ global_gitea.ssh_port }}"
+        gitea_username: "{{ global_gitea.admin_username }}"
+        gitea_email: "{{ global_gitea.admin_email }}"
+        gitea_password: "{{ global_gitea.admin_password }}"
+        drone_domain: "drone.{{ global_ingress.base_domain }}"
+        drone_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        gitea_tls: "{{ global_ingress.tls }}"
+        gitea_force_tls: "{{ global_ingress.force_tls }}"
+        gitea_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+      when: global_cluster.state == 'present' and global_install.ci == true
+
+    - import_role:
+        name: helm-drone-server
+      vars:
+        namespace: drone
+        gitea_namespace: gitea
+        drone_host: "drone.{{ global_ingress.base_domain }}"
+        drone_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        drone_gitea_server: "{{ 'https' if global_ingress.tls == true else 'http' }}://gitea.{{ global_ingress.base_domain }}"
+        drone_rpc_secret: hdke845ydbs8dfubsdfoa7tadskjhgfaskjhg
+        drone_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+        tls: "{{ global_ingress.tls }}"
+        drone_force_tls: "{{ global_ingress.force_tls }}"
+      when: global_cluster.state == 'present' and global_install.ci == true
+
+    - import_role:
+        name: helm-drone-runner
+      vars:
+        namespace: drone
+      when: global_cluster.state == 'present' and global_install.ci == true

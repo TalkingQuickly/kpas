@@ -1,0 +1,23 @@
+# /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+After=network.target wg-quick@wg0.service
+
+[Service]
+Type=notify
+ExecStart=/opt/etcd/etcd --name {{ inventory_hostname }} \
+  --data-dir /var/lib/etcd \
+  --listen-client-urls "http://{{ wireguard_ip }}:2379,http://localhost:2379" \
+  --advertise-client-urls "http://{{ wireguard_ip }}:2379" \
+  --listen-peer-urls "http://{{ wireguard_ip }}:2380" \
+  --initial-cluster "{% for host in groups['etcd'] %}{{ host }}=http://{{ hostvars[host]['wireguard_ip'] }}:2380{{ "," if not loop.last else ""}}{% endfor %}" \
+  --initial-advertise-peer-urls "http://{{ wireguard_ip }}:2380" \
+  --heartbeat-interval 200 \
+  --election-timeout 5000
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

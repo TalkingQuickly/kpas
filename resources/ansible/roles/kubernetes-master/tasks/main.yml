@@ -1,0 +1,25 @@
+- name: "Seed the master config"
+  template:
+    src: master_manifest.yml.j2
+    dest: /tmp/master-configuration.yml
+    owner: root
+    group: root
+    mode: 700
+    force: no
+
+- name: "Init the master node"
+  shell: |
+    kubeadm init --config /tmp/master-configuration.yml
+  args:
+    creates: /etc/kubernetes/manifests/kube-apiserver.yaml
+
+- name: "Setup weave"
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+
+- name: "Download the kubeconfig file"
+  fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ global_master_kubeconf }}"
+    flat: yes

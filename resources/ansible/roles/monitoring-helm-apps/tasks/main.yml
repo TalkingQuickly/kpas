@@ -1,0 +1,36 @@
+- name: 'Install Prometheus'
+  import_role:
+    name: helm-prometheus
+  vars:
+    namespace: monitoring
+    drone_bearer_token: "{{ global_drone | default(omit) and global_drone.bearer_token | default(omit) }}" 
+    drone_host: "drone.{{ global_ingress.base_domain }}"
+    traefik_host: traefik-prometheus.kube-system.svc.cluster.local:9100
+    prometheus_ingress_host: "prometheus.{{ global_ingress.base_domain }}"
+    alert_manager_ingress_host: "alertmanager.{{ global_ingress.base_domain }}"
+    username: "{{ global_ingress.basic_auth_username }}"
+    password: "{{ global_ingress.basic_auth_password }}"
+    tls: "{{ global_ingress.tls }}"
+    prometheus_force_tls: "{{ global_ingress.force_tls }}"
+    prometheus_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+
+- name: 'Install Loki'
+  import_role:
+    name: helm-loki
+  vars:
+    namespace: monitoring
+    grafana_namespace: monitoring
+    loki_service: loki
+
+- name: 'Install Grafana'
+  import_role:
+    name: helm-grafana
+  vars:
+    namespace: monitoring
+    admin_username: "{{ global_grafana.username }}"
+    admin_password: "{{ global_grafana.password }}"
+    prometheus_service: prometheus-server
+    grafana_ingress_host: "grafana.{{ global_ingress.base_domain }}"
+    grafana_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+    tls: "{{ global_ingress.tls }}"
+    grafana_force_tls: "{{ global_ingress.force_tls }}"

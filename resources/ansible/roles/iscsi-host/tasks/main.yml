@@ -1,0 +1,3 @@
+- name: 'Install open-iscsi, required by Longhorn'
+  apt:
+    pkg: "open-iscsi"

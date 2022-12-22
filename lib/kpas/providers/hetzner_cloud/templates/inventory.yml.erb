@@ -1,0 +1,8 @@
+plugin: hcloud
+strict: true
+groups:
+  first_master: (labels.first_master == 'true') and (labels.kpas_cluster_name == '<%= options.fetch(:cluster_name) %>')
+  secondary_masters: (labels.secondary_master == 'true') and (labels.kpas_cluster_name == '<%= options.fetch(:cluster_name) %>')
+  workers: (labels.worker == 'true') and (labels.kpas_cluster_name == '<%= options.fetch(:cluster_name) %>')
+  masters_and_workers: ((labels.worker == 'true') or (labels.first_master == 'true') or (labels.secondary_master == 'true')) and (labels.kpas_cluster_name == '<%= options.fetch(:cluster_name) %>')
+  etcd: ((labels.first_master == 'true') or (labels.secondary_master == 'true')) and (labels.kpas_cluster_name == '<%= options.fetch(:cluster_name) %>')

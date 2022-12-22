@@ -1,0 +1,57 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+  vars:
+    namespace: "{{ grafana_namespace }}"
+  
+- name: 'Create a tempfile for the promtail values'
+  tempfile:
+    state:  file
+  register: promtail_values
+
+- name: Create the promtail values file
+  template:
+    src: promtail_values.yml.j2
+    dest: "{{promtail_values.path}}"
+    force: yes
+
+- name: 'Create a tempfile for the loki values'
+  tempfile:
+    state:  file
+  register: loki_values
+
+- name: Create the loki values file
+  template:
+    src: loki_values.yml.j2
+    dest: "{{loki_values.path}}"
+    force: yes
+
+- name: 'Make sure we have the Loki helm repos'
+  shell: |
+    helm repo add loki https://grafana.github.io/loki/charts
+    helm repo update
+
+- name: 'Install Loki'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install loki loki/loki \
+    -f {{ loki_values.path }} \
+    --namespace {{ namespace }}
+
+- name: 'Install PromTail'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install promtail loki/promtail \
+    -f {{ promtail_values.path }} \
+    --namespace {{ namespace }}
+
+- name: 'Add the discovery file for prometheus'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'grafana-datasource.yml.j2') }}" | kubectl apply -f - \

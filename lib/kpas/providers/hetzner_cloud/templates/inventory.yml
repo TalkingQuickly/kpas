@@ -1,0 +1,8 @@
+plugin: hcloud
+strict: true
+groups:
+  first_master: labels.first_master == 'true'
+  secondary_masters: labels.secondary_master == 'true'
+  workers: labels.worker == 'true'
+  masters_and_workers: (labels.worker == 'true') or (labels.first_master == 'true') or (labels.secondary_master == 'true')
+  etcd: (labels.first_master == 'true') or (labels.secondary_master == 'true')

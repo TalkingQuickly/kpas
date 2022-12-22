@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-s3-creds
+  namespace: {{ namespace }}
+type: Opaque
+data:
+  AWS_ACCESS_KEY_ID: {{ global_longhorn.backups.aws_backup_access_key_id | b64encode }}
+  AWS_SECRET_ACCESS_KEY: {{ global_longhorn.backups.aws_backup_secret_access_key | b64encode }}

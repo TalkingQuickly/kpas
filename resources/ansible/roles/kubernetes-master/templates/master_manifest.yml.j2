@@ -1,0 +1,24 @@
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ labels.wireguard_ip }}
+bootstrapTokens:
+- token: h14kfo.i0a0a1pllooan83t
+  ttl: '0'
+---
+
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+etcd:
+  external:
+    endpoints:
+    {% for host in groups['etcd'] %}
+    - http://{{ hostvars[host]['labels']['wireguard_ip'] }}:2379
+    {% endfor %}
+
+controlPlaneEndpoint: "{{ ansible_host }}"
+
+apiServer:
+  certSANs:
+  - {{ ansible_host }}
+  - {{ labels.wireguard_ip }}

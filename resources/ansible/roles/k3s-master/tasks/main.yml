@@ -1,0 +1,45 @@
+- name: 'Install the initial master (Multi master etcd)'
+  shell: curl -sfL https://get.k3s.io | K3S_TOKEN={{ k3s.shared_secret }} INSTALL_K3S_EXEC="server --cluster-init --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} --disable local-storage --disable traefik --node-taint k3s-controlplane=true:NoExecute" sh -
+  when: (first == true) and (k3s_multimaster == true)
+
+- name: 'Install the secondary masters (Multi master etcd)'
+  shell: curl -sfL https://get.k3s.io | K3S_TOKEN={{ k3s.shared_secret }} INSTALL_K3S_EXEC="server --server https://{{ master_ip }}:6443 --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} --disable local-storage --disable traefik --node-taint k3s-controlplane=true:NoExecute" sh -
+  when: (first != true) and (k3s_multimaster == true)
+
+- name: 'Install a standalone master with SQLite and a non-schedulable master node'
+  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} --disable local-storage --disable traefik --node-taint k3s-controlplane=true:NoExecute" sh -
+  when: (first == true) and (k3s_multimaster == false) and (groups.workers is defined)
+
+- name: 'Install a standalone master with SQLite and a schedulable master node'
+  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} {{ '--disable local-storage ' if disable_local_provisioner else '' }} --disable traefik" sh -
+  when: (first == true) and (k3s_multimaster == false) and (groups.workers is not defined)
+
+- name: 'Wait for the join token to be present'
+  wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+
+- name: 'Get the join token'
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_join_token
+
+- name: 'Wait for the kubeconfig to be present'
+  wait_for:
+    path: /etc/rancher/k3s/k3s.yaml
+
+- name: "Download the kubeconfig file"
+  fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ global_master_kubeconf }}"
+    flat: yes
+  when: first == true
+  
+- name: "Update the kubeconf file with the external IP"
+  become: false
+  replace:
+    dest: "{{ global_master_kubeconf }}"
+    regexp: '127.0.0.1'
+    replace: "{{ ansible_host }}"
+  delegate_to: localhost
+  when: first == true
+

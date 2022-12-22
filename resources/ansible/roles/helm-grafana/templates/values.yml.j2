@@ -1,0 +1,30 @@
+ingress:
+  enabled: true
+  hosts:
+    - {{ grafana_ingress_host }}
+{% if tls == true %}
+  tls:
+    - secretName: grafana-tls-secret
+      hosts:
+        - {{ grafana_ingress_host }}
+{% endif %}
+{% if tls == true %}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ grafana_certificate_issuer }}
+{% if grafana_force_tls %}
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+
+sidecar:
+  datasources:
+    enabled: true
+    label: grafana_datasource
+
+admin:
+  existingSecret: grafana-admin-secret
+  userKey: username
+  passwordKey: password
+
+persistence:
+  enabled: true

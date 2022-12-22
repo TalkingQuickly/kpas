@@ -1,0 +1,117 @@
+---
+- name: Create instances
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Create Hetzner Cloud VPS instances
+      import_role:
+        name: hetzner_cloud_cluster
+      vars:
+        hetzner_cloud_cluster:
+          api_token: "{{ global_hetzner.api_token }}"
+          state: "{{ global_cluster.state }}"
+          masters: "{{ global_hetzner.master_count }}"
+          workers: "{{ global_hetzner.worker_count }}"
+          master_type: "{{ global_hetzner.master_type }}"
+          worker_type: "{{ global_hetzner.worker_type }}"
+          ssh_keys: "{{ global_hetzner.ssh_keys }}"
+      when: skip_provision != true
+
+    - meta: refresh_inventory
+
+- name: Wait for all nodes to be available
+  hosts: masters_and_workers
+  gather_facts: false
+  tasks: 
+    - name: Wait for machines to be available
+      wait_for_connection:
+
+- hosts: masters_and_workers
+  become_user: root
+  become: yes
+  tasks:
+    - name: Setup hostvars based on hetzner cloud labels
+      import_role:
+        name: hetzner-cloud-server
+
+    - name: Install and setup firewall
+      import_role:
+        name: ufw
+
+    - name: Setup a secure network
+      import_role:
+        name: wireguard
+
+    - name: Insure Longhorn dependencies
+      import_role:
+        name: iscsi-host
+
+    - name: Disable Swap
+      import_role:
+        name: disable_swap
+
+    - name: Install Docker
+      import_role:
+        name: docker
+
+    - name: Install Core Kubernetes Components
+      import_role:
+        name: kubernetes-common
+
+- hosts: etcd
+  become_user: root
+  become: yes
+  tasks:
+    - name: Setup etcd
+      import_role:
+        name: etcd
+
+- hosts: first_master
+  become_user: root
+  become: yes
+  tasks:
+    - name: Setup the first master
+      import_role:
+        name: kubernetes-master
+
+- hosts: workers
+  become_user: root
+  become: yes
+  tasks:
+    - name: Join the cluster from the worker
+      import_role:
+        name: kubernetes-worker
+
+- name: Set the cluster endpoint
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Set endpoint to first master
+      set_fact:
+        dynamic_cluster_endpoint: "{{ hostvars[groups['first_master'][0]]['ansible_host'] }}:6443"
+
+    - import_role:
+        name: cloudflare_dns
+      vars:
+        cloudflare_dns:
+          full_domain: "*.{{ global_ingress.base_domain }}"
+          zone_identifier: "{{ global_cloudflare.zone_identifier }}"
+          content: "{{ hostvars[groups['workers'][0]]['ansible_host'] }}"
+          api_token: "{{ global_cloudflare.api_token }}"
+          state: "{{ global_cluster.state }}"
+          type: A
+      when: global_cloudflare.enable == true
+
+- name: Install NGINX Ingress
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - import_role:
+        name: helm-nginx-ingress
+      when: global_cluster.state == 'present'
+
+- name: Install Cluster applications  
+  import_playbook: cluster-apps.yml

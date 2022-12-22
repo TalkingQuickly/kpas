@@ -1,0 +1,23 @@
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Create the basic auth secret'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'basic-auth-creds.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Install The Dashboard'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+    helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
+    -f {{ values.path }} \
+    --namespace kube-system

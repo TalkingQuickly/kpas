@@ -1,0 +1,46 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Make sure we have the Cert Manager repos'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm repo add jetstack https://charts.jetstack.io
+    helm repo update
+
+- name: 'Install cert manager'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install \
+      cert-manager \
+      jetstack/cert-manager \
+      --namespace cert-manager \
+      --version v1.8.0 \
+      --set installCRDs=true
+
+# We have retries and a delay on this one  to give cert-manager 
+# time to come online
+- name: 'Create the ACME staging cluster-issuer'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'cluster-issuer-staging.yml.j2') }}" | kubectl apply -f - \
+  register: acme_staging_output
+  until: acme_staging_output.rc == 0
+  delay: 60
+  retries: 10
+
+- name: 'Create the ACME production cluster-issuer'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'cluster-issuer-production.yml.j2') }}" | kubectl apply -f - \
+  until: acme_staging_output.rc == 0
+  retries: 3
+
+- name: 'Create the cloudlare DNS01 Issuers'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'cloudflare-api-token-secret.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'cluster-issuer-cloudflare-dns-production.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'cluster-issuer-cloudflare-dns-staging.yml.j2') }}" | kubectl apply -f -
+  when: acme_cloudflare_dns01_enabled == true

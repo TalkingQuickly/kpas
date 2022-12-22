@@ -1,0 +1,30 @@
+- name: Ensure UFW is installed
+  apt:
+    pkg: 
+      - ufw
+
+- name: Allow SSH, Wireguard & The Kubernetes API
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - '22' # SSH
+    - '51820' # Wireguard Peers
+    - '6443' # Kubernetes API
+    - '30010' # gitea ssh
+
+- name: Default deny everything else
+  ufw:
+    default: deny
+
+- name: Allow everything in on wireguard interfaces_file
+  ufw:
+    rule: allow
+    proto: any
+    direction: in
+    interface: wg0
+
+- name: Enable UFW
+  ufw:
+    state: enabled

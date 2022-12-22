@@ -1,0 +1,57 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Create a tempfile for the prometheus config'
+  tempfile:
+    state:  file
+  register: config
+
+- name: Create the prometheus config file
+  template:
+    src: prometheus-server.yml.j2
+    dest: "{{config.path}}"
+    force: yes
+
+- name: 'Create the basic auth secret'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'basic-auth-creds.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Install The Prometheus Server'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm upgrade --install prometheus prometheus-community/prometheus \
+    -f {{ values.path }} \
+    --namespace {{ namespace }}
+
+- name: Apply the prometheus configuration
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl apply -f {{ config.path }}
+
+- name: Delete the values tempfile
+  file:
+   path: "{{ values.path }}"
+   state: absent
+  when: values.path is defined
+
+- name: Delete the prometheus config tempfile
+  file:
+   path: "{{ config.path }}"
+   state: absent
+  when: config.path is defined
+

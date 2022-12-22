@@ -1,0 +1,22 @@
+- name: "Get and install etcd"
+  shell: |
+    export ETCD_VERSION="{{ etcd_version }}"
+    mkdir -p /opt/etcd
+    curl -L https://storage.googleapis.com/etcd/${ETCD_VERSION}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz \
+      -o /opt/etcd-${ETCD_VERSION}-linux-amd64.tar.gz
+    tar xzvf /opt/etcd-${ETCD_VERSION}-linux-amd64.tar.gz -C /opt/etcd --strip-components=1
+
+- name: "Create a systemd unit file for etcd"
+  template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    owner: root
+    group: root
+    mode: 700
+    force: yes
+
+- name: Enable the etcd service and make sure it's started
+  service:
+    name: etcd.service
+    state: started
+    enabled: yes

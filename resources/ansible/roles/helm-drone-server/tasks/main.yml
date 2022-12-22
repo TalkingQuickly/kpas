@@ -1,0 +1,77 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Make sure we have the bitnami repo for Postgres'
+  shell: |
+    helm repo add bitnami https://charts.bitnami.com/bitnami
+    helm repo update
+
+- name: 'Create a tempfile for the postgres values config'
+  tempfile:
+    state:  file
+  register: postgres_values
+
+- name: Create the postgres values file
+  template:
+    src: postgres-values.yml.j2
+    dest: "{{postgres_values.path}}"
+    force: yes
+
+- name: 'Install Postgres for Drone'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install drone-postgres bitnami/postgresql \
+    -f {{ postgres_values.path }} \
+    --namespace {{ namespace }}
+  register: result
+
+- name: 'Make sure we have the drone repos'
+  shell: |
+    helm repo add drone https://charts.drone.io
+    helm repo update
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: get the drone client id
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl get secret drone-gitea-oauth-app-creds \
+    --namespace {{ gitea_namespace }} \
+    --template={{'{{'}}.data.client_id{{ '}}' }} | base64 --decode
+  register: gitea_client_id
+
+- name: get the drone client secret
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl get secret drone-gitea-oauth-app-creds \
+    --namespace {{ gitea_namespace }} \
+    --template={{'{{'}}.data.client_secret{{ '}}' }} | base64 --decode
+  register: gitea_client_secret
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Install The Drone Server'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install drone drone/drone \
+    -f {{ values.path }} \
+    --namespace {{ namespace }}
+  register: result
+
+- name: Delete the tempfile
+  file:
+   path: "{{ values.path }}"
+   state: absent
+  when: values.path is defined
+
+## Links
+# MTU values: https://medium.com/@liejuntao001/fix-docker-in-docker-network-issue-in-kubernetes-cc18c229d9e5

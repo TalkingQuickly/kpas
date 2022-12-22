@@ -1,0 +1,47 @@
+- name: "Create the first master"
+  hcloud_server:
+    name: "kpas-{{ global_cluster.name }}-kube-master-{{ item }}"
+    api_token: "{{ hetzner_cloud_cluster.api_token }}"
+    image: ubuntu-20.04
+    server_type: "{{ hetzner_cloud_cluster.master_type }}"
+    ssh_keys: "{{ hetzner_cloud_cluster.ssh_keys }}"
+    labels:
+      first_master: "true"
+      secondary_master: "false"
+      worker: "false"
+      wireguard_ip: "10.2.0.{{ item }}"
+      kpas_cluster_name: "{{ global_cluster.name }}"
+    state: "{{ hetzner_cloud_cluster.state }}"
+  loop: [1]
+
+- name: "Create the secondary masters"
+  hetzner.hcloud.hcloud_server:
+    name: "kpas-{{ global_cluster.name }}-kube-master-{{ item }}"
+    api_token: "{{ hetzner_cloud_cluster.api_token }}"
+    image: ubuntu-20.04
+    server_type: "{{ hetzner_cloud_cluster.master_type }}"
+    ssh_keys: "{{ global_hetzner.ssh_keys }}"
+    labels:
+      first_master: "false"
+      secondary_master: "true"
+      worker: "false"
+      wireguard_ip: "10.2.0.{{ item }}"
+      kpas_cluster_name: "{{ global_cluster.name }}"
+    state: "{{ hetzner_cloud_cluster.state }}"
+  loop: "{{ range(2, hetzner_cloud_cluster.masters | int + 1)|list }}"
+
+- name: "Create the workers"
+  hetzner.hcloud.hcloud_server:
+    name: "kpas-{{ global_cluster.name }}-kube-worker-{{ item }}"
+    api_token: "{{ hetzner_cloud_cluster.api_token }}"
+    image: ubuntu-20.04
+    server_type: "{{ hetzner_cloud_cluster.worker_type }}"
+    ssh_keys: "{{ global_hetzner.ssh_keys }}"
+    labels:
+      first_master: "false"
+      secondary_master: "false"
+      worker: "true"
+      wireguard_ip: "10.2.0.{{ item }}"
+      kpas_cluster_name: "{{ global_cluster.name }}"
+    state: "{{ hetzner_cloud_cluster.state }}"
+  loop: "{{ range(hetzner_cloud_cluster.masters | int + 1, hetzner_cloud_cluster.workers |int + hetzner_cloud_cluster.masters | int + 1)|list }}"

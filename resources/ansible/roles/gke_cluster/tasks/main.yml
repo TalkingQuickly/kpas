@@ -1,0 +1,85 @@
+---
+- name: Make sure the kubeconfs directory exists
+  file:
+    path: "{{ global_master_kubeconf_base_dir }}"
+    state: directory
+
+- name: Create the GKE cluster
+  google.cloud.gcp_container_cluster:
+    name: "{{ global_cluster.name }}"
+    initial_node_count: "{{ global_gke.initial_node_count }}"
+    master_auth:
+      username: "{{ global_gke.master_auth_username }}"
+      password: "{{ global_gke.master_auth_password }}"
+    node_config:
+    location: "{{ global_gke.region }}"
+    project: "{{ global_gke.project }}"
+    auth_kind: serviceaccount
+    service_account_contents: "{{ global_gke.service_account_content }}"
+    state: present
+  register: gcp_cluster
+
+- name: create a node pool
+  google.cloud.gcp_container_node_pool:
+    name: "{{ global_cluster.name }}--pool"
+    initial_node_count: "{{ global_gke.initial_node_count }}"
+    config:
+      machine_type: "{{ global_gke.node_type }}"
+      disk_size_gb: "{{ global_gke.node_disk_size }}"
+      disk_type: "{{ global_gke.node_disk_type }}"
+    cluster: "{{ gcp_cluster }}"
+    location: "{{ global_gke.region }}"
+    project: "{{ global_gke.project }}"
+    auth_kind: serviceaccount
+    service_account_contents: "{{ global_gke.service_account_content }}"
+    state: present
+
+- name: Create temporary file
+  tempfile:
+    state: file
+    suffix: temp
+  register: temp_service_account
+
+- name: Write back to a file
+  copy:
+    content: '{{ global_gke.service_account_content }}'
+    dest: "{{ temp_service_account.path }}"
+
+- name: get the kubeconf file (because kubconfig_path in GCP module currently broken)
+  shell: |
+    gcloud auth activate-service-account --key-file {{ temp_service_account.path }}
+    export KUBECONFIG={{ global_master_kubeconf }}.gcp.yml
+    gcloud container clusters get-credentials {{ global_cluster.name }} --project {{ global_gke.project }} --zone {{ global_gke.region }}
+
+- name: create the admin service account and cluster role binding
+  shell: |
+    gcloud auth activate-service-account --key-file {{ temp_service_account.path }}
+    export KUBECONFIG={{ global_master_kubeconf }}.gcp.yml
+    echo "{{ lookup('template', 'service_account.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'cluster_role_binding.yml.j2') }}" | kubectl apply -f -
+
+- name: Get the service account secrets
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.gcp.yml
+    kubectl get sa admin-user -n kube-system -o=jsonpath='{.secrets[0].name}'
+  register: service_account_secret
+
+- name: Get the service account tokens
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.gcp.yml
+    kubectl get secret "{{ service_account_secret['stdout'] }}" -n kube-system -o "jsonpath={.data.token}" | base64 -d
+  register: service_account_token
+
+- name: Get the service account certificates
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.gcp.yml
+    kubectl get secret "{{ service_account_secret['stdout'] }}" -n kube-system -o "jsonpath={.data['ca\.crt']}"
+  register: service_account_certificate
+
+- name: Create local kubeconfig files
+  template:
+    src: kubeconf.yml.j2
+    dest: "{{ global_master_kubeconf }}"
+
+- name: set the global cluster endpoint
+  set_fact: dynamic_cluster_endpoint="https://{{gcp_cluster.masterAuth.username}}:{{gcp_cluster.masterAuth.password}}@{{ gcp_cluster.endpoint }}"

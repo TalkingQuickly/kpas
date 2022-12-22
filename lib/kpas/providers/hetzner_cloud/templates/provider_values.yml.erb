@@ -1,0 +1,12 @@
+## Hetzner Cloud Configuration
+global_hetzner:
+  api_token: "{{ vault_global_hetzner_api_token }}"
+  master_count: 1
+  worker_count: 3
+  master_type: cx11
+  worker_type: cx41
+  ssh_keys:
+    - <%= options.fetch(:ssh_key_name) %>
+
+ansible_user: root
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'

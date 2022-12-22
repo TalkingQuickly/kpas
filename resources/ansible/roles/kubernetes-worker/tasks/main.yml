@@ -1,0 +1,6 @@
+- name: Join the cluster from remaining nodes
+  shell: |
+    kubeadm join --token=h14kfo.i0a0a1pllooan83t \
+      {{ hostvars[groups['first_master'][0]]['wireguard_ip'] }}:6443 --discovery-token-unsafe-skip-ca-verification
+  args:
+    creates: /etc/kubernetes/kubelet.conf

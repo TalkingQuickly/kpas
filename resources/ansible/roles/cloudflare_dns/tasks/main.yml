@@ -1,0 +1,50 @@
+# Currently we don't use the community Cloudflare module for
+# this because at time of writing there's not a clear way to
+# do so without using an API token which has broader permissions
+# than just modifying a single zone
+#
+# - name: "Create the DNS Entry"
+#   community.general.cloudflare_dns:
+#     zone: "{{ cloudflare_dns.zone_identifier }}"
+#     name: "{{ cloudflare_dns.full_domain }}"
+#     type: "{{ cloudflare_dns.type }}"
+#     value: "{{ cloudflare_dns.content }}"
+#     api_token: "{{ cloudflare_dns.api_token }}"
+
+- name: Create the DNS Entry
+  uri:
+    url: "https://api.cloudflare.com/client/v4/zones/{{ cloudflare_dns.zone_identifier }}/dns_records?name={{ cloudflare_dns.full_domain }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cloudflare_dns.api_token }}"
+  register: existing_cloudflare_records
+
+- name: 'Create a new DNS Entry at {{ cloudflare_dns.full_domain }}'
+  uri:
+    url: https://api.cloudflare.com/client/v4/zones/{{ cloudflare_dns.zone_identifier }}/dns_records
+    method: POST
+    body:
+      type: "{{ cloudflare_dns.type }}"
+      name: "{{ cloudflare_dns.full_domain }}"
+      content: "{{ cloudflare_dns.content }}"
+      proxied: false
+    status_code: [200, 400]
+    body_format: json
+    headers:
+      Authorization: "Bearer {{ cloudflare_dns.api_token }}"
+  when: '(existing_cloudflare_records.json.result | length) == 0'
+
+- name: 'Update the existing DNS Entry at {{ cloudflare_dns.full_domain }}'
+  uri:
+    url: 'https://api.cloudflare.com/client/v4/zones/{{ cloudflare_dns.zone_identifier }}/dns_records/{{ existing_cloudflare_records.json.result[0].id }}'
+    method: PUT
+    body:
+      type: "{{ cloudflare_dns.type }}"
+      name: "{{ cloudflare_dns.full_domain }}"
+      content: "{{ cloudflare_dns.content }}"
+      proxied: false
+    status_code: [200, 400]
+    body_format: json
+    headers:
+      Authorization: "Bearer {{ cloudflare_dns.api_token }}"
+  when: '(existing_cloudflare_records.json.result | length) > 0'

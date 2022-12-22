@@ -1,0 +1,47 @@
+- name: Label the system namespace
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl label --overwrite namespace/kube-system type=system 
+
+- name: Create user app namespaces
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'service_account.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'service_account_secret.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'role_binding.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'regcred.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'network-policy.yml.j2') }}" | kubectl apply -f -
+  loop: "{{ user_app_namespaces }}"
+
+- name: Get the service account tokens
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl get secret "{{ item }}-token" -n {{ item }} -o "jsonpath={.data.token}"
+  loop: "{{ user_app_namespaces }}"
+  loop_control: 
+    index_var: index
+  register: service_account_tokens
+
+- name: Get the service account certificates
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl get secret "{{ item }}-token" -n {{ item }} -o "jsonpath={.data['ca\.crt']}"
+  loop: "{{ user_app_namespaces }}"
+  loop_control: 
+    index_var: index
+  register: service_account_certificates
+
+- name: 'Make sure the cluster credentials directory exists'
+  file:
+    path: "{{ global_master_kubeconf_base_dir }}"
+    state: directory
+
+- name: Create local kubeconfig files
+  template:
+    src: kubeconf.yml.j2
+    dest: "{{ global_master_kubeconf_base_dir }}/{{ item }}.yml"
+  loop: "{{ user_app_namespaces }}"
+  delegate_to: localhost
+  loop_control: 
+    index_var: index

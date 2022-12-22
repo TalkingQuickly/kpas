@@ -1,0 +1,5 @@
+- name: Copy the manifest across named so it will be applied after the default one
+  template:
+    src: coredns-configmap.yml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/coredns2.yaml
+    force: false

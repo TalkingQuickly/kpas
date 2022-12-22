@@ -1,0 +1,4 @@
+[Interface]
+Address = {{ wireguard_ip }}/32
+ListenPort = 51820
+PrivateKey = {{ wg0_private_key.content | b64decode }}

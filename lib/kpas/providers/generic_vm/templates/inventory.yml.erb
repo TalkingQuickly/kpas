@@ -1,0 +1,13 @@
+all:
+  hosts:
+    <%= options.fetch(:master_ip) %>:
+      wireguard_ip: 10.2.0.1
+      name: <%=options.fetch(:cluster_name) %>_master
+      ansible_host: <%= options.fetch(:master_ip) %>
+  children:
+    first_master:
+      hosts:
+        <%= options.fetch(:master_ip) %>:
+    masters_and_workers:
+      hosts:
+        <%= options.fetch(:master_ip) %>:

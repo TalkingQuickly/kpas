@@ -1,0 +1,13 @@
+- hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - import_role:
+        name: helm-docker-registry
+      vars:
+        namespace: cluster-registry
+        username: "{{ global_ingress.basic_auth_username }}"
+        password: "{{ global_ingress.basic_auth_password }}"
+        domain: "registry.{{ global_ingress.base_domain }}"
+        tls: "{{ global_ingress.tls }}"
+        registry_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+        registry_force_tls: "{{ global_ingress.force_tls }}"

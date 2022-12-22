@@ -1,0 +1,29 @@
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'registry-namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Create the secret with basic auth credentials'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'basic-auth-creds.yml.j2') }}" | kubectl apply -f - \
+    --namespace {{ namespace | mandatory }}
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Install the registry'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm repo add twuni https://helm.twun.io
+    helm upgrade registry twuni/docker-registry --install \
+    -f {{ values.path }} \
+    --namespace {{ namespace | mandatory }}

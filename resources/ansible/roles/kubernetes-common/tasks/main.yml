@@ -1,0 +1,40 @@
+- name: Add kubernetes repo key
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: "Add Kubernetes Repo"
+  apt_repository:
+    repo: 'deb http://apt.kubernetes.io/ kubernetes-xenial-unstable main'
+    state: present
+    update_cache: yes
+
+- name: "Install Kubernetes Packages"
+  apt:
+    name: ['kubelet', 'kubeadm', 'kubectl', 'kubernetes-cni']
+
+- name: "Set kubelet options"
+  template:
+    src: kubelet.j2
+    dest: /etc/default/kubelet
+    owner: root
+    group: root
+    mode: 700
+
+- name: "Setup network routes"
+  shell: |
+    ip route add 10.96.0.0/16 dev wg0 src {{ labels.wireguard_ip }} || true
+
+- name: "Create a systemd unit file to persist the network rouotes"
+  template:
+    src: overlay-route.service.j2
+    dest: /etc/systemd/system/overlay-route.service
+    owner: root
+    group: root
+    mode: 700
+    force: no
+
+- name: Enable the systemd service to make sure routes are persisted
+  service:
+    name: overlay-route.service
+    enabled: yes

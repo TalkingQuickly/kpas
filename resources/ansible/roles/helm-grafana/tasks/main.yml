@@ -1,0 +1,74 @@
+# Useful post onhttps://medium.com/@chris_linguine/how-to-monitor-your-kubernetes-cluster-with-prometheus-and-grafana-2d5704187fc8 this; 
+
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: 'Create a tempfile for the grafana datasource configmap'
+  tempfile:
+    state:  file
+  register: config
+
+- name: Create the grafana config file
+  template:
+    src: data-source-configmap.yml.j2
+    dest: "{{config.path}}"
+    force: yes
+
+- name: 'Create a tempfile for the grafana admin login secret'
+  tempfile:
+    state:  file
+  register: admin_login_secret 
+
+- name: Create the admin login secret template file 
+  template:
+    src: admin-login-secret.yml.j2
+    dest: "{{admin_login_secret.path}}"
+    force: yes
+
+- name: Create the grafan admin login secret
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl apply -f {{ admin_login_secret.path }}
+
+- name: Create the grafana config map
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl apply -f {{ config.path }}
+
+- name: 'Make sure we have the Grafana helm repos'
+  shell: |
+    helm repo add grafana https://grafana.github.io/helm-charts
+    helm repo update
+
+- name: 'Install The Grafana  Server'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install grafana grafana/grafana \
+    -f {{ values.path }} \
+    --namespace {{ namespace }}
+
+- name: Delete the values tempfile
+  file:
+   path: "{{ values.path }}"
+   state: absent
+  when: values.path is defined
+
+- name: Delete grafana datasource tempfile
+  file:
+   path: "{{ config.path }}"
+   state: absent
+  when: config.path is defined
+

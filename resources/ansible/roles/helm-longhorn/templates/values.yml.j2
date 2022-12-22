@@ -1,0 +1,36 @@
+ingress:
+  enabled: true
+  host: {{ domain }}
+{% if tls == true %}
+  tls: true
+{% endif %}
+  annotations:
+{% if global_ingress.type == 'traefik' %}
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/auth-secret: basic-auth-creds
+{% elif global_ingress.type == 'nginx' %}
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth-creds
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+{% endif %}
+{% if tls == true %}
+    cert-manager.io/cluster-issuer: {{ longhorn_certificate_issuer }}
+{% if longhorn_ui_force_tls %}
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+
+csi:
+  kubeletRootDir: /var/lib/kubelet
+  
+persistence:
+  defaultClassReplicaCount: {{ global_longhorn.default_replica_count }}
+
+{% if global_longhorn.backups.enabled %}
+defaultSettings:
+  backupTarget: {{ global_longhorn.backups.backup_target }}
+  backupTargetCredentialSecret: aws-s3-creds
+
+backups:
+  recurringJobs: {{ global_longhorn.backups.backup_schedule }}
+{% endif %}

@@ -1,0 +1,31 @@
+ingress:
+  enabled: true
+{% if global_ingress.tls == true %}
+  tls:
+    - secretName: kubernetes-dashboard-tls-secret
+      hosts:
+        - dashboard.{{ global_ingress.base_domain }}
+{% endif %}
+  hosts:
+  - dashboard.{{ global_ingress.base_domain }}
+  annotations:
+{% if global_ingress.tls == true %}
+    cert-manager.io/cluster-issuer: {{ global_ingress.certificate_issuer }}
+{% if global_ingress.force_tls %}
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+{% if global_ingress.type == 'traefik' %}
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/auth-secret: dashboard-basic-auth-creds
+{% elif global_ingress.type == 'nginx' %}
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: dashboard-basic-auth-creds
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+{% endif %}
+
+rbac.clusterAdminRole: true
+rbac.create: true
+enableSkipLogin: true
+enableInsecureLogin: true

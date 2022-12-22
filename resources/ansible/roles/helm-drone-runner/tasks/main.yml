@@ -1,0 +1,33 @@
+
+- name: 'Create the namespace'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    echo "{{ lookup('template', 'namespace.yml.j2') }}" | kubectl apply -f - \
+
+- name: 'Make sure we have the drone repos'
+  shell: |
+    helm repo add drone https://charts.drone.io
+    helm repo update
+
+- name: 'Create a tempfile for the values config'
+  tempfile:
+    state:  file
+  register: values
+
+- name: Create the values file
+  template:
+    src: values.yml.j2
+    dest: "{{values.path}}"
+    force: yes
+
+- name: debug
+  debug:
+    msg: "{{ values.path }}"
+
+- name: 'Install The Drone Runner'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm upgrade --install drone-runner drone/drone-runner-kube \
+    -f {{ values.path }} \
+    --namespace {{ namespace }}
+  register: installOutput

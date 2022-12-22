@@ -1,0 +1,2 @@
+- name: 'Install the worker'
+  shell:  curl -sfL https://get.k3s.io | K3S_URL=https://{{ master_ip }}:6443 K3S_TOKEN={{ k3s_join_token }} INSTALL_K3S_EXEC="agent --node-ip {{ wireguard_ip }} --node-external-ip {{ wireguard_ip }} --flannel-iface={{ interface }}" sh -

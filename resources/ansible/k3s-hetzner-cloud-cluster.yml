@@ -1,0 +1,145 @@
+---
+- name: Ensure nodes are created
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - import_role:
+        name: hetzner_cloud_cluster
+      vars:
+        hetzner_cloud_cluster:
+          api_token: "{{ global_hetzner.api_token }}"
+          state: "{{ global_cluster.state }}"
+          masters: "{{ global_hetzner.master_count }}"
+          workers: "{{ global_hetzner.worker_count }}"
+          master_type: "{{ global_hetzner.master_type }}"
+          worker_type: "{{ global_hetzner.worker_type }}"
+          ssh_keys: "{{ global_hetzner.ssh_keys }}"
+      when: skip_provision != true
+
+    - meta: refresh_inventory
+
+    - fail:
+        msg: Cluster deleted
+      when: global_cluster.state == 'absent'
+
+- name: Wait for all nodes to be available
+  hosts: all
+  gather_facts: false
+  tasks: 
+    - name: Wait for machine to be available
+      wait_for_connection:
+      when: skip_provision != true
+
+- name: Hetzner cloud specific setup
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Setup hostvars based on hetzner cloud labels
+      import_role:
+        name: hetzner-cloud-server
+      when: skip_provision != true
+
+- hosts: masters_and_workers
+  become_user: root
+  become: yes
+  gather_facts: false
+  tasks:
+    - import_role:
+        name: ansible_pipelining
+      when: skip_provision != true
+
+    - import_role:
+        name: ufw
+      when: skip_provision != true
+
+    - import_role:
+        name: wireguard
+      when: skip_provision != true
+
+    - import_role:
+        name: iscsi-host
+      when: skip_provision != true
+
+- hosts: first_master
+  become_user: root
+  become: yes
+  gather_facts: false
+  tasks:
+    - import_role:
+        name: k3s-master
+      vars:
+        interface: wg0
+        first: true
+        k3s_multimaster: "{{ k3s.multimaster }}"
+        disable_local_provisioner: "{{ global_install.longhorn == true }}"
+      when: skip_provision != true
+
+    - import_role:
+        name: k3s-coredns-config
+      when: skip_provision != true
+
+- hosts: secondary_masters
+  become_user: root
+  become: yes
+  gather_facts: false
+  tasks:
+    - import_role:
+        name: k3s-master
+      vars:
+        interface: wg0
+        k3s_join_token: "{{hostvars[groups['first_master'][0]]['k3s_join_token']['content'] | b64decode | trim}}"
+        master_ip: "{{ hostvars[groups['first_master'][0]]['wireguard_ip'] }}"
+        first: false
+        k3s_multimaster: "{{ k3s.multimaster }}"
+      when: skip_provision != true
+
+    - import_role:
+        name: k3s-coredns-config
+      when: skip_provision != true
+    
+- hosts: workers
+  become_user: root
+  become: yes
+  gather_facts: false
+  tasks:
+    - import_role:
+        name: k3s-worker
+      vars:
+        master_ip: "{{ hostvars[groups['first_master'][0]]['wireguard_ip'] }}"
+        k3s_join_token: "{{hostvars[groups['first_master'][0]]['k3s_join_token']['content'] | b64decode | trim}}"
+        interface: wg0
+      when: skip_provision != true
+
+- name: Set the cluster endpoint
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Set endpoint to first master
+      set_fact:
+        dynamic_cluster_endpoint: "https://{{ hostvars[groups['first_master'][0]]['ansible_host'] }}:6443"
+
+    - import_role:
+        name: cloudflare_dns
+      vars:
+        cloudflare_dns:
+          full_domain: "*.{{ global_ingress.base_domain }}"
+          zone_identifier: "{{ global_cloudflare.zone_identifier }}"
+          content: "{% if groups.workers is defined %}  {{ hostvars[groups['workers'][0]]['ansible_host'] }} {% else %} {{ hostvars[groups['first_master'][0]]['ansible_host'] }} {% endif %}"
+          api_token: "{{ global_cloudflare.api_token }}"
+          state: "{{ global_cluster.state }}"
+          type: A
+      when: global_cloudflare.enable == true
+
+- name: Install NGINX Ingress
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - import_role:
+        name: helm-nginx-ingress
+      when: global_cluster.state == 'present'
+
+- name: Install Cluster applications  
+  import_playbook: cluster-apps.yml

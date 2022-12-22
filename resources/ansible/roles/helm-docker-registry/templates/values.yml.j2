@@ -1,0 +1,30 @@
+persistence:
+  enabled: true
+
+ingress:
+  enabled: true
+{% if tls == true %}
+  tls:
+    - secretName: registry-tls-secret
+      hosts:
+        - {{ domain }}
+{% endif %}
+  annotations:
+{% if global_ingress.type == 'traefik' %}
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/auth-secret: basic-auth-creds
+{% elif global_ingress.type == 'nginx' %}
+    nginx.ingress.kubernetes.io/proxy-body-size: 0
+    nginx.org/client-max-body-size: 0
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth-creds
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+{% endif %}
+{% if tls == true %}
+    cert-manager.io/cluster-issuer: {{ registry_certificate_issuer }}
+{% if registry_force_tls %}
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+  hosts:
+    - {{ domain | mandatory }}

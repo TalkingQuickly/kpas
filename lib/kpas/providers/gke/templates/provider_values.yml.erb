@@ -1,0 +1,10 @@
+global_gke:
+  project: <%= options.fetch(:gke_project) %>
+  master_auth_username: <%= SecureRandom.hex %>
+  master_auth_password: "{{ vault_global_gke_master_auth_password }}"
+  service_account_content: "{{ vault_global_gke_service_account_content }}"
+  region: <%= options.fetch(:gke_region) %>
+  node_type: n1-standard-4
+  node_disk_size: 500
+  node_disk_type: pd-ssd
+  initial_node_count: 1

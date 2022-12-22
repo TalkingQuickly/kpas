@@ -1,0 +1,110 @@
+---
+- name: Create holding variable for stack outputs
+  set_fact:
+    aws_eks_stack_outputs: {}
+
+- name: Ensure VPC exists via CloudFormation.
+  cloudformation:
+    aws_access_key: "{{ global_aws_eks.access_key_id }}"
+    aws_secret_key: "{{ global_aws_eks.secret_access_key }}"
+    stack_name: "{{ global_cluster.name }}-vpc"
+    state: present
+    region: "{{ global_aws_eks.region }}"
+    disable_rollback: false
+    template: roles/aws_eks_cluster/cloudformation/vpc.yml
+    template_parameters:
+      Region: "{{ global_aws_eks.region }}"
+      BaseName: "{{ global_cluster.name }}"
+    tags:
+      stack: "{{ global_cluster.name }}-vpc"
+      application: "{{ global_cluster.name }}-eks"
+  register: vpc_info
+
+- name: Add to stack_outputs.
+  set_fact:
+    aws_eks_stack_outputs: "{{ aws_eks_stack_outputs | combine(vpc_info['stack_outputs']) }}"
+
+- name: Ensure EKS Cluster exists via CloudFormation.
+  cloudformation:
+    aws_access_key: "{{ global_aws_eks.access_key_id }}"
+    aws_secret_key: "{{ global_aws_eks.secret_access_key }}"
+    stack_name: "{{ global_cluster.name }}-cluster"
+    state: present
+    region: "{{ global_aws_eks.region }}"
+    disable_rollback: false
+    template: roles/aws_eks_cluster/cloudformation/eks-cluster.yml
+    template_parameters:
+      ClusterName: "{{ global_aws_eks.cluster_name }}"
+      KubernetesVersion: "{{ global_aws_eks.kubernetes_version }}"
+      Subnets: "{{ aws_eks_stack_outputs.Subnets }}"
+      VpcId: "{{ aws_eks_stack_outputs.VpcId }}"
+    tags:
+      stack: "{{ global_cluster.name }}-cluster"
+      application: "{{ global_cluster.name }}-eks"
+  register: eks_cluster_info
+
+- name: store the global cluster endpoint 
+  set_fact:
+    dynamic_cluster_endpoint: "{{ eks_cluster_info['stack_outputs']['ClusterEndpoint'] }}"
+
+- name: Ensure EKS Node Group exists via CloudFormation.
+  cloudformation:
+    aws_access_key: "{{ global_aws_eks.access_key_id }}"
+    aws_secret_key: "{{ global_aws_eks.secret_access_key }}"
+    stack_name: "{{ global_cluster.name }}-nodegroup"
+    state: present
+    region: "{{ global_aws_eks.region }}"
+    disable_rollback: false
+    create_timeout: 10
+    template: roles/aws_eks_cluster/cloudformation/eks-nodegroup.yml
+    template_parameters:
+      ClusterName: "{{ global_aws_eks.cluster_name }}"
+      NodeGroupName: "{{ global_aws_eks.nodegroup_name }}"
+      NodeGroupDesiredCapacity: "{{ global_aws_eks.nodegroup_cluster_size }}"
+      NodeGroupMinCapacity: "{{ global_aws_eks.nodegroup_min_cluster_size }}"
+      NodeGroupMaxCapacity: "{{ global_aws_eks.nodegroup_max_cluster_size }}"
+      NodeInstanceType: "{{ global_aws_eks.nodegroup_instance_type }}"
+      Subnets: "{{ aws_eks_stack_outputs.Subnets }}"
+      NodeDiskSize: "{{ global_aws_eks.node_disk_size }}"
+    tags:
+      stack: "{{ global_cluster.name }}-nodegroup"
+      application: "{{ global_cluster.name }}-eks"
+  register: eks_nodegroup_info
+
+- name: Get the AWS specific Kubeconfig file
+  shell: |
+    export AWS_ACCESS_KEY={{ global_aws_eks.access_key_id }}
+    export AWS_SECRET_ACCESS_KEY={{ global_aws_eks.secret_access_key }}
+    aws eks --region {{ global_aws_eks.region }} update-kubeconfig --name {{ global_cluster.name }} --kubeconfig {{ global_master_kubeconf }}.aws.yml
+
+- name: create the admin service account and cluster role binding
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.aws.yml
+    export AWS_ACCESS_KEY={{ global_aws_eks.access_key_id }}
+    export AWS_SECRET_ACCESS_KEY={{ global_aws_eks.secret_access_key }}
+    echo "{{ lookup('template', 'service_account.yml.j2') }}" | kubectl apply -f -
+    echo "{{ lookup('template', 'cluster_role_binding.yml.j2') }}" | kubectl apply -f -
+
+- name: Get the service account secrets
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.aws.yml
+    kubectl get sa admin-user -n kube-system -o=jsonpath='{.secrets[0].name}'
+  register: service_account_secret
+
+- name: Get the service account tokens
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.aws.yml
+    kubectl get secret "{{ service_account_secret['stdout'] }}" -n kube-system -o "jsonpath={.data.token}" | base64 -D
+  register: service_account_token
+
+- name: Get the service account certificates
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}.aws.yml
+    kubectl get secret "{{ service_account_secret['stdout'] }}" -n kube-system -o "jsonpath={.data['ca\.crt']}"
+  register: service_account_certificate
+
+- name: Create local kubeconfig files
+  template:
+    src: kubeconf.yml.j2
+    dest: "{{ global_master_kubeconf }}"
+    

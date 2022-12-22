@@ -1,0 +1,37 @@
+- hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - import_role:
+        name: helm-gitea
+      vars:
+        namespace: gitea
+        gitea_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        gitea_http_domain: "gitea.{{ global_ingress.base_domain }}"
+        gitea_ssh_domain: "gitea.{{ global_ingress.base_domain }}"
+        gitea_ssh_port: "{{ global_gitea.ssh_port }}"
+        gitea_username: "{{ global_gitea.admin_username }}"
+        gitea_email: "{{ global_gitea.admin_email }}"
+        gitea_password: "{{ global_gitea.admin_password }}"
+        drone_domain: "drone.{{ global_ingress.base_domain }}"
+        drone_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        gitea_tls: "{{ global_ingress.tls }}"
+        gitea_force_tls: "{{ global_ingress.force_tls }}"
+        gitea_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+
+    - import_role:
+        name: helm-drone-server
+      vars:
+        namespace: drone
+        gitea_namespace: gitea
+        drone_host: "drone.{{ global_ingress.base_domain }}"
+        drone_protocol: "{{ 'https' if global_ingress.tls == true else 'http' }}"
+        drone_gitea_server: "{{ 'https' if global_ingress.tls == true else 'http' }}://gitea.{{ global_ingress.base_domain }}"
+        drone_rpc_secret: hdke845ydbs8dfubsdfoa7tadskjhgfaskjhg
+        drone_certificate_issuer: "{{ global_ingress.certificate_issuer }}"
+        tls: "{{ global_ingress.tls }}"
+        drone_force_tls: "{{ global_ingress.force_tls }}"
+
+    - import_role:
+        name: helm-drone-runner
+      vars:
+        namespace: drone

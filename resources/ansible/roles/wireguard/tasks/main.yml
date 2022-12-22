@@ -1,0 +1,71 @@
+- name: "Install Wireguard"
+  apt:
+    name: wireguard
+    update_cache: yes
+
+- name: "Generate private keys for hosts if they dont exist"
+  shell: wg genkey > /etc/wireguard/wg0.priv
+  args:
+    creates: /etc/wireguard/wg0.priv
+
+- name: "Generate public keys for hosts if they don't exist"
+  shell: cat /etc/wireguard/wg0.priv | tr -d "\n" | wg pubkey > /etc/wireguard/wg0.pub
+  args:
+    creates: /etc/wireguard/wg0.pub
+
+# Slurp returns base64 encoded blobs containing data in a remote file
+# See https://docs.ansible.com/ansible/latest/modules/slurp_module.html
+# for details. To use in a template `{{ KEY_NAME.content | b64decode }}`
+- name: 'Get private keys for hosts'
+  slurp:
+    src: /etc/wireguard/wg0.priv
+  register: wg0_private_key
+
+- name: 'Get public keys for hosts'
+  slurp:
+    src: /etc/wireguard/wg0.pub
+  register: wg0_public_key
+
+- name: "Generate the base config file if it doesn't exist"
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: 700
+    force: no
+
+- name: "Ensure IPv4 Forwarding is enabled"
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Start and enable WireGuard service
+  service:
+    name: wg-quick@wg0
+    state: started
+    enabled: yes
+
+- name: "Replicate ip config from wg-quick"
+  shell: |
+    ip link add wg0 type wireguard
+    ip address add {{ wireguard_ip }} dev wg0
+    ip link set mtu 1420 up dev wg0
+
+# For each host, loop over all the other hosts and add them as peers
+# We use `wg set` and `ip route add` rather than `wg-quick@wg0` as this
+# allows us to add new peers without downtime
+- name: "Add all the Wireguard peers"
+  shell: |
+    wg set wg0 peer {{ hostvars[item]['wg0_public_key']['content'] | b64decode | trim }} allowed-ips {{ hostvars[item]['wireguard_ip'] }}/32 endpoint {{ hostvars[item]['ansible_host']  }}:51820 persistent-keepalive 25
+    wg-quick save wg0
+    ip route add {{ hostvars[item]['wireguard_ip'] }}/32 dev wg0 || true
+  # Loop over all hostnames in the inventory and execute these commands
+  # subject to the `when` key below
+  loop: "{{ groups['masters_and_workers'] }}"
+  # Execute the commands for everything except the current host which
+  # is `inventory_hostname` 
+  when: item != inventory_hostname

@@ -1,0 +1,51 @@
+persistentVolume:
+  enabled: false
+
+metrics:
+  prometheus:
+    enabled: true
+
+env:
+  ## REQUIRED: Set the user-visible Drone hostname, sans protocol.
+  ## Ref: https://docs.drone.io/installation/reference/drone-server-host/
+  ##
+  DRONE_SERVER_HOST: {{ drone_host }}
+  ## The protocol to pair with the value in DRONE_SERVER_HOST (http or https).
+  ## Ref: https://docs.drone.io/installation/reference/drone-server-proto/
+  ##
+  DRONE_SERVER_PROTO: {{ drone_protocol }}
+  ## REQUIRED: Set the secret secret token that the Drone server and its Runners will use
+  ## to authenticate. This is commented out in order to leave you the ability to set the
+  ## key via a separately provisioned secret (see existingSecretName above).
+  ## Ref: https://docs.drone.io/installation/reference/drone-rpc-secret/
+  ##
+  DRONE_RPC_SECRET: {{ drone_rpc_secret }}
+  DRONE_GITEA_CLIENT_ID: {{ gitea_client_id.stdout }}
+  DRONE_GITEA_CLIENT_SECRET: {{ gitea_client_secret.stdout }}
+  DRONE_GITEA_SERVER: {{ drone_gitea_server }}
+  DRONE_DATABASE_DRIVER: postgres
+  DRONE_DATABASE_DATASOURCE: postgres://postgres:85nsgf73jwnbfjdks8fjhfmd@drone-postgres-postgresql:5432/drone?sslmode=disable
+  DRONE_LOGS_TRACE: true
+ingress:
+  enabled: true
+{% if tls == true %}
+  tls:
+    - secretName: drone-tls-secret
+      hosts:
+        - {{ drone_host }}
+{% endif %}
+  annotations:
+    kubernetes.io/ingress.class: nginx
+{% if tls == true %}
+    cert-manager.io/cluster-issuer: {{ drone_certificate_issuer }}
+{% if drone_force_tls %}
+    traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+
+  hosts:
+    - host: {{ drone_host }}
+      paths:
+        - path: "/"
+          pathType: Prefix
+

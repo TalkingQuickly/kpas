@@ -1,0 +1,8 @@
+- name: 'Install The Nginx Ingress'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+    helm upgrade --install nginx-ingress ingress-nginx/ingress-nginx \
+    --set rbac.create=true \
+    --namespace kube-system

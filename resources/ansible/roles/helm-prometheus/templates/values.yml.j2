@@ -1,0 +1,67 @@
+server:
+  ingress:
+    enabled: true
+{% if tls == true %}
+    tls:
+      - secretName: prometheus-tls-secret
+        hosts:
+          - {{ prometheus_ingress_host }}
+{% endif %}
+    hosts:
+    - {{ prometheus_ingress_host }} 
+    annotations:
+{% if tls == true %}
+      cert-manager.io/cluster-issuer: {{ prometheus_certificate_issuer }}
+{% if prometheus_force_tls %}
+      traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+{% if global_ingress.type == 'traefik' %}
+      ingress.kubernetes.io/auth-type: basic
+      ingress.kubernetes.io/auth-secret: basic-auth-creds
+{% elif global_ingress.type == 'nginx' %}
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: basic-auth-creds
+      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+{% endif %}
+  resources:
+    requests:
+      cpu: 0.25
+      memory: 512M
+alertmanager:
+  ingress:
+    enabled: true
+{% if tls == true %}
+    tls:
+      - secretName: alertmanager-tls-secret
+        hosts:
+          - {{ alert_manager_ingress_host }}
+{% endif %}
+    hosts:
+    - {{ alert_manager_ingress_host }}
+    annotations:
+{% if tls == true %}
+      cert-manager.io/cluster-issuer: {{ prometheus_certificate_issuer }}
+{% if prometheus_force_tls %}
+      traefik.ingress.kubernetes.io/redirect-entry-point: https
+{% endif %}
+{% endif %}
+{% if global_ingress.type == 'traefik' %}
+      ingress.kubernetes.io/auth-type: basic
+      ingress.kubernetes.io/auth-secret: basic-auth-creds
+{% elif global_ingress.type == 'nginx' %}
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: basic-auth-creds
+      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+{% endif %}
+nodeExporter:
+  enabled: true
+  # https://www.digitalocean.com/community/questions/using-do-managed-kubernetes-cluster-with-helm-chart-stable-prometheus-results-in-some-node_exporters-being-unreachable
+  # This is effectively due to the problem explained above, could be fixed, but for now we accept that we don't get these
+  # network metrics but the rest works fine.
+  hostNetwork: false
+  extraHostPathMounts:
+    - name: smart-stats
+      mountPath: /smart
+      readOnly: true
+      hostPath: /smart
