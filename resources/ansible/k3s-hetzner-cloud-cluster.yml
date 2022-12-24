@@ -72,11 +72,14 @@
         interface: wg0
         first: true
         k3s_multimaster: "{{ k3s.multimaster }}"
+        k3s_version: "{{ k3s.version }}"
         disable_local_provisioner: "{{ global_install.longhorn == true }}"
       when: skip_provision != true
 
     - import_role:
         name: k3s-coredns-config
+      vars:
+        dns_fallback: "{{ k3s.global_dns.fallback }}"
       when: skip_provision != true
 
 - hosts: secondary_masters
@@ -92,10 +95,13 @@
         master_ip: "{{ hostvars[groups['first_master'][0]]['wireguard_ip'] }}"
         first: false
         k3s_multimaster: "{{ k3s.multimaster }}"
+        k3s_version: "{{ k3s.version }}"
       when: skip_provision != true
 
     - import_role:
         name: k3s-coredns-config
+      vars:
+        dns_fallback: "{{ k3s.global_dns.fallback }}"
       when: skip_provision != true
     
 - hosts: workers

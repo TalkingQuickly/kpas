@@ -41,8 +41,8 @@ module Providers
         options[:acme_email] ||=  ask("\nWhat email should be used for acme certificates?")
 
         if options[:dns_cloudflare]
-          options[:dns_cloudflare_api_token] = ask('Your Cloudflare API token:', default: options[:global_config][:dns_cloudflare][:api_token])
-          options[:dns_cloudflare_zone] = ask('The Cloudflare zone entries should be created in:',  default: options[:global_config][:dns_cloudflare][:zone])
+          options[:dns_cloudflare_api_token] ||= ask('Your Cloudflare API token:', default: options[:global_config][:dns_cloudflare][:api_token])
+          options[:dns_cloudflare_zone] ||= ask('The Cloudflare zone entries should be created in:',  default: options[:global_config][:dns_cloudflare][:zone])
         end
 
         options

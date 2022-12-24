@@ -9,6 +9,7 @@ global_cluster:
 k3s:
   shared_secret: <%= SecureRandom.hex %>
   multimaster: <%= options.fetch(:k3s_multimaster, false) == 'true' %>
+  version: v1.24.9+k3s1
   global_dns:
     fallback: "/etc/resolv.conf"
 <% end %>
