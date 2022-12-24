@@ -1,0 +1,12 @@
+exe/kpas hetzner_cloud bootstrap k3s-test-cluster \
+  --api-token=$HETZNER_CLOUD_API_TOKEN \
+  --password=$KPAS_SECRETS_PASSWORD \
+  --variant=k3s \
+  --no-k3s-multimaster \
+  --no-letsencrypt-production \
+  --dns-cloudflare \
+  --dns-cloudflare-api-token=$CLOUDFLARE_API_TOKEN \
+  --dns-cloudflare-zone=$CLOUDFLARE_ZONE \
+  --base-domain=$BASE_DOMAIN \
+  --acme-email=$ACME_EMAIL \
+  --ssh_key_name=$HETZNER_CLOUD_SSH_KEY_NAME

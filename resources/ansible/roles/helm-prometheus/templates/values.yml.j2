@@ -38,7 +38,10 @@ alertmanager:
           - {{ alert_manager_ingress_host }}
 {% endif %}
     hosts:
-    - {{ alert_manager_ingress_host }}
+      - host: {{ alert_manager_ingress_host }}
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
     annotations:
 {% if tls == true %}
       cert-manager.io/cluster-issuer: {{ prometheus_certificate_issuer }}
