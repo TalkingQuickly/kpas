@@ -93,7 +93,7 @@
       accept: application/json
       Authorization: token {{ gitea_access_token }}
       Content-Type: application/json
-    body: "{\"name\":\"DroneCI\", \"redirect_uris\": [ \"{{ drone_protocol }}://{{ drone_domain }}/login\" ] }"
+    body: "{\"confidential_client\": true, \"name\":\"DroneCI\", \"redirect_uris\": [ \"{{ drone_protocol }}://{{ drone_domain }}/login\" ] }"
     body_format: json
     status_code: '201'
     validate_certs: "{{ validate_certs }}"
@@ -104,7 +104,7 @@
   shell: |
     export KUBECONFIG={{ global_master_kubeconf }}
     echo "{{ lookup('template', 'oauth-secret.yml.j2') }}" | kubectl apply -f - \
-  when: user_creation.rc == 0
+  when: access_token_creation.rc == 0
 
 - name: Delete the tempfile
   file:

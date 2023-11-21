@@ -25,6 +25,7 @@ gitea:
       SSH_DOMAIN: {{ gitea_ssh_domain }}
       SSH_PORT: {{ gitea_ssh_port }}
       ROOT_URL: '{{ gitea_protocol }}://{{ gitea_http_domain }}/'
+      MINIMUM_KEY_SIZE_CHECK: 'false'
     service:
       DISABLE_REGISTRATION: 'true'
       REQUIRE_SIGNIN_VIEW: 'true'
