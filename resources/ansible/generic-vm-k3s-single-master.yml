@@ -32,6 +32,7 @@
         first: true
         k3s_multimaster: "{{ k3s.multimaster }}"
         k3s_version: "{{ k3s.version }}"
+        k3s_data_dir: "{{ k3s.standalone_data_dir}}"
         disable_local_provisioner: "{{ global_install.longhorn == true }}"
       when: skip_provision != true
 
@@ -55,6 +56,7 @@
         first: false
         k3s_multimaster: "{{ k3s.multimaster }}"
         k3s_version: "{{ k3s.version }}"
+        k3s_data_dir: "{{ k3s.standalone_data_dir }}"
       when: skip_provision != true
 
     - import_role:

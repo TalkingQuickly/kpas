@@ -11,7 +11,7 @@
   when: (first == true) and (k3s_multimaster == false) and (groups.workers is defined)
 
 - name: 'Install a standalone master with SQLite and a schedulable master node'
-  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} {{ '--disable local-storage ' if disable_local_provisioner else '' }} --disable traefik" sh -
+  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --node-ip {{ wireguard_ip }} --flannel-iface={{ interface }} --node-external-ip {{ wireguard_ip }} {{ '--disable local-storage ' if disable_local_provisioner else '' }} {{ '--default-local-storage-path=/data' if k3s_data_dir else '' }}  --disable traefik" sh -
   when: (first == true) and (k3s_multimaster == false) and (groups.workers is not defined)
 
 - name: 'Wait for the join token to be present'

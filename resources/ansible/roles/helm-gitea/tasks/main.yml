@@ -51,18 +51,28 @@
     export KUBECONFIG={{ global_master_kubeconf }}
     kubectl exec -it --namespace {{ namespace }} \
       $(kubectl get pods -n {{ namespace }} --selector='app.kubernetes.io/name=gitea' -o jsonpath='{.items[0].metadata.name}') -c gitea \
-      -- su git -c 'gitea admin user create --username {{ gitea_username }} --password {{ gitea_password }} --email {{ gitea_email }} --admin --access-token --must-change-password=false'
+      -- sh -c 'gitea admin user create --username {{ gitea_username }} --password {{ gitea_password }} --email {{ gitea_email }} --admin --access-token --must-change-password=false'
   register: user_creation
   retries: 10
   delay: 20
-  until: (user_creation.rc == 0) or ('user already exists' in user_creation.stdout)
+  until: (user_creation.rc == 0) or ('user already exists' in user_creation.stderr)
   failed_when: 
-    - (user_creation.rc == 1) and ('user already exists' not in user_creation.stdout)
+    - (user_creation.rc == 1) and ('user already exists' not in user_creation.stderr)
+
+- name: 'Create the Gitea access token'
+  shell: |
+    export KUBECONFIG={{ global_master_kubeconf }}
+    kubectl exec -it --namespace {{ namespace }} \
+      $(kubectl get pods -n {{ namespace }} --selector='app.kubernetes.io/name=gitea' -o jsonpath='{.items[0].metadata.name}') -c gitea \
+      -- sh -c 'gitea admin user generate-access-token --username=administrator --token-name=initial_setup_token --scopes=write:user'
+  register: access_token_creation
+  failed_when: 
+    - (access_token_creation.rc == 1) and ('access token name has been used already' not in access_token_creation.stderr)
 
 - name: get the access token
   set_fact:
-    gitea_access_token: "{{ user_creation.stdout | regex_search('Access token was successfully created... (.*)') | regex_replace('Access token was successfully created... ', '') }}"
-  when: user_creation.rc == 0
+    gitea_access_token: "{{ access_token_creation.stdout | regex_search('Access token was successfully created: (.*)') | regex_replace('Access token was successfully created: ', '') }}"
+  when: access_token_creation.rc == 0
 
 - name: "Waiting for Gitea to be available"
   uri:
@@ -88,7 +98,7 @@
     status_code: '201'
     validate_certs: "{{ validate_certs }}"
   register: oauth2app_output
-  when: user_creation.rc == 0
+  when: access_token_creation.rc == 0
 
 - name: 'Create the secret with the drone app creds'
   shell: |
