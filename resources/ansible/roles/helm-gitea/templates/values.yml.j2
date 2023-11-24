@@ -31,6 +31,8 @@ gitea:
       REQUIRE_SIGNIN_VIEW: 'true'
     security:
       INSTALL_LOCK: 'true'
+    webhook:
+      ALLOWED_HOST_LIST: {{ drone_domain}} 
   admin:
     username: ""
     password: ""
